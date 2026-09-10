@@ -1,0 +1,26 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "java",
+            "name": "MegaTris",
+            "request": "launch",
+            "mainClass": "MegaTris",
+            "projectName": "MegaTris_169d8aa6"
+        },
+        {
+            "type": "java",
+            "name": "GameBackground",
+            "request": "launch",
+            "mainClass": "megatris.ui.GameBackground",
+            "projectName": "MegaTris_169d8aa6"
+        },
+        {
+            "type": "java",
+            "name": "Run MegaTris",
+            "request": "launch",
+            "mainClass": "megatris.ui.MegaTris",
+            "preLaunchTask": "Build MegaTris desktop app"
+        }
+    ]
+}
