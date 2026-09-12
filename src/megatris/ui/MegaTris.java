@@ -871,8 +871,8 @@ public class MegaTris extends JFrame implements BoardViewState {
         cell.setForeground(fgDefault);
         cell.setOpaque(true);
         cell.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
-        Color base = header ? bgHighlight : (column == 1 ? new Color(48, 52, 70)
-            : column == 2 ? new Color(58, 63, 86) : bgMain);
+        Color base = header ? bgHighlight : (column == 1 ? gridColor
+            : column == 2 ? bgHighlight : bgMain);
         cell.setBackground(new Color(base.getRed(), base.getGreen(), base.getBlue(),
             selected ? 235 : 175));
         int width = column == 0 ? 32 : 88;
@@ -1441,7 +1441,7 @@ public class MegaTris extends JFrame implements BoardViewState {
         gridColor = palette.grid;
         
         // --- LA VERA MODIFICA CORRETTA PER I BORDI ---
-        if ("Neon".equals(theme)) {
+        if ("Neon".equals(theme) || "Retro".equals(theme)) {
             currentBorderColor = gridColor; 
         } else {
             currentBorderColor = new Color(98, 114, 164); 
@@ -1477,9 +1477,9 @@ public class MegaTris extends JFrame implements BoardViewState {
         }
         
         applyThemeAndLanguage(getContentPane());
-        
         updateComputerBattleControls();
         updateUIState();
+        refreshHistoryView();
         
         revalidate();
         repaint();

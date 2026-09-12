@@ -1,1 +1,5 @@
-/1.0
+release_finale/
+input_jar/
+*.jar
+bin/
+*.exe
