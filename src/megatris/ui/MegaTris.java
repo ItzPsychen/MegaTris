@@ -33,8 +33,15 @@ public class MegaTris extends JFrame implements BoardViewState {
     private ThemeSelector themeSelector;
 
     private final Preferences prefs = Preferences.userNodeForPackage(MegaTris.class);
-    private boolean isEnglish = prefs.getBoolean("isEnglish", true);
+    private String currentLang = prefs.get("language", "EN"); // EN, IT, DE
+    public String currentLang() { return currentLang; }
     
+    private boolean tournamentRule = prefs.getBoolean("tournamentRule", false);
+    private JToggleButton tournamentToggle;
+
+    // Al posto di languageToggle:
+    private OptionSlider languageSlider;
+
     // UI Components
     private JPanel mainBoardPanel;
     private JPanel boardContainer;
@@ -71,6 +78,7 @@ public class MegaTris extends JFrame implements BoardViewState {
     private JPanel setupMenuPanel;
     private JPanel settingsPanel;
     private JPanel multiplayerPanel;
+    private JPanel rulesPanel;
     private JPanel gameScreen;
     private JLabel setupTitle;
     private boolean setupForComputerBattle;
@@ -192,8 +200,7 @@ public class MegaTris extends JFrame implements BoardViewState {
             SoundManager.playSound("src/megatris/sound/click.wav");
             humanSide = humanSideToggle.isSelected() ? 'O' : 'X';
             
-            humanSideToggle.setText(isEnglish ? "Play " + humanSide : "Gioca " + humanSide);
-            
+            humanSideToggle.setText(("IT".equals(currentLang) ? "Gioca " : ("DE".equals(currentLang) ? "Spiele " : "Play ")) + humanSide);            
             if (isHumanVsComputer() && board != null) restartGame();
         });
         xComputerLevelBox.addActionListener(e -> {
@@ -384,6 +391,7 @@ public class MegaTris extends JFrame implements BoardViewState {
         setupMenuPanel = createMenuPanel();
         settingsPanel = createSettingsPanel();
         multiplayerPanel = createMenuPanel();
+        rulesPanel = createMenuPanel();
 
         // --- IMPOSTAZIONI: AUDIO, LINGUA E TEMI ---
         
@@ -397,21 +405,21 @@ public class MegaTris extends JFrame implements BoardViewState {
             SoundManager.setSfxVolume(sfxSlider.getValue() / 100f);
         });
 
-        languageToggle = new JToggleButton();
-        languageToggle.setName("Language");
-        languageToggle.setSelected(!isEnglish); 
-        languageToggle.setText(isEnglish ? "Language: English" : "Lingua: Italiano");
+        String[] langOptions = {"English", "Italiano", "Deutsch"};
+        languageSlider = new OptionSlider(langOptions, translate("Language"));
+        languageSlider.setName("LanguageSlider");
         
-        UiStyler.minimalButton(languageToggle);
-        UiStyler.buttonSize(languageToggle, 280, 44);
-        languageToggle.setAlignmentX(Component.CENTER_ALIGNMENT);
-        languageToggle.addActionListener(e -> {
+        int langIdx = "IT".equals(currentLang) ? 1 : ("DE".equals(currentLang) ? 2 : 0);
+        languageSlider.setSelectedIndex(langIdx);
+        UiStyler.width(languageSlider, 280);
+        languageSlider.setAlignmentX(Component.CENTER_ALIGNMENT);
+        
+        languageSlider.addActionListener(e -> {
             SoundManager.playSound("src/megatris/sound/click.wav");
-            isEnglish = !languageToggle.isSelected();
+            int sel = languageSlider.getSelectedIndex();
+            currentLang = (sel == 1) ? "IT" : (sel == 2 ? "DE" : "EN");
             
-            prefs.putBoolean("isEnglish", isEnglish);
-            
-            languageToggle.setText(isEnglish ? "Language: English" : "Lingua: Italiano");
+            prefs.put("language", currentLang);
             applyThemeAndLanguage(getContentPane()); 
         });
 
@@ -424,6 +432,20 @@ public class MegaTris extends JFrame implements BoardViewState {
         for (int i = 0; i < themeNames.length; i++) {
             if (themeNames[i].equals(savedTheme)) themeIdx = i;
         }
+
+        tournamentToggle = new JToggleButton();
+        tournamentToggle.setName("TournamentRuleToggle");
+        tournamentToggle.setSelected(tournamentRule);
+        UiStyler.minimalButton(tournamentToggle);
+        UiStyler.buttonSize(tournamentToggle, 280, 44);
+        tournamentToggle.setAlignmentX(Component.CENTER_ALIGNMENT);
+        
+        tournamentToggle.addActionListener(e -> {
+            SoundManager.playSound("src/megatris/sound/click.wav");
+            tournamentRule = tournamentToggle.isSelected();
+            prefs.putBoolean("tournamentRule", tournamentRule);
+            applyThemeAndLanguage(getContentPane());
+        });
         
         themeSelector = new ThemeSelector(themeNames, outerC, innerC, themeIdx, theme -> {
             setTheme(theme); 
@@ -437,7 +459,9 @@ public class MegaTris extends JFrame implements BoardViewState {
         settingsContent.add(Box.createVerticalStrut(12));
         settingsContent.add(sfxSlider);
         settingsContent.add(Box.createVerticalStrut(24));
-        settingsContent.add(languageToggle);
+        settingsContent.add(tournamentToggle);
+        settingsContent.add(Box.createVerticalStrut(24));
+        settingsContent.add(languageSlider);
         settingsContent.add(Box.createVerticalStrut(24));
         settingsContent.add(themeSelector);
         
@@ -470,6 +494,11 @@ public class MegaTris extends JFrame implements BoardViewState {
         mainContent.add(menuButton("SETTINGS", e -> {
             settingsReturnScreen = "menu";
             showScreen("settings");
+        }));
+
+        mainContent.add(Box.createVerticalStrut(16));
+        mainContent.add(menuButton("RULES", e -> {
+            showScreen("rules");
         }));
         
         mainContent.add(Box.createVerticalStrut(16));
@@ -564,6 +593,30 @@ public class MegaTris extends JFrame implements BoardViewState {
         multiplayerContent.add(menuButton("BACK", e -> showScreen("modes")));
         multiplayerPanel.add(centered(multiplayerContent), BorderLayout.CENTER);
 
+        // --- SCHERMATA REGOLE (Senza Scrollbar) ---
+        JPanel rulesContent = new JPanel(new BorderLayout(20, 20));
+        rulesContent.setOpaque(false);
+        rulesContent.setBorder(BorderFactory.createEmptyBorder(20, 80, 20, 80));
+
+        rulesContent.add(menuTitle("RULES"), BorderLayout.NORTH);
+
+        JPanel gridPanel = new JPanel(new GridLayout(2, 2, 40, 40));
+        gridPanel.setOpaque(false);
+
+        gridPanel.add(createRuleCard("1. How to Play", "RULE_1_DESC", new RuleVisualPanel(1)));
+        gridPanel.add(createRuleCard("2. Winning Boards", "RULE_2_DESC", new RuleVisualPanel(2)));
+        gridPanel.add(createRuleCard("3. Board Occupied", "RULE_3_DESC", new RuleVisualPanel(3)));
+        gridPanel.add(createRuleCard("4. Free Move", "RULE_4_DESC", new RuleVisualPanel(4)));
+        
+        rulesContent.add(gridPanel, BorderLayout.CENTER);
+
+        JPanel bottomPanel = new JPanel();
+        bottomPanel.setOpaque(false);
+        bottomPanel.add(menuButton("BACK", e -> showScreen("menu")));
+        rulesContent.add(bottomPanel, BorderLayout.SOUTH);
+
+        rulesPanel.add(rulesContent, BorderLayout.CENTER);
+
         // --- ASSEGNAZIONE NOMI PER TRADUZIONE ---
         musicSlider.setName("Music Volume");
         sfxSlider.setName("SFX Volume");
@@ -580,6 +633,7 @@ public class MegaTris extends JFrame implements BoardViewState {
         screenCards.add(settingsPanel, "settings");
         screenCards.add(multiplayerPanel, "multiplayer");
         screenCards.add(gameScreen, "game");
+        screenCards.add(rulesPanel, "rules");
         add(screenPanel, BorderLayout.CENTER);
         
         // --- COLLEGAMENTI TASTIERA ---
@@ -676,15 +730,21 @@ public class MegaTris extends JFrame implements BoardViewState {
     private JPanel createSettingsPanel() {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setOpaque(false);
+        
+        // Aggiunge lo stesso margine superiore (40px) degli altri menu
+        panel.setBorder(BorderFactory.createEmptyBorder(40, 80, 40, 80));
+        
         JPanel controls = new JPanel(new GridBagLayout());
         controls.setOpaque(false);
-        controls.setBorder(BorderFactory.createEmptyBorder(24, 80, 40, 80));
+        // Rimuove i margini duplicati in basso, tenendo solo lo stacco dal contenuto
+        controls.setBorder(BorderFactory.createEmptyBorder(24, 0, 0, 0));
+        
         controls.add(menuButton("BACK", e -> showScreen(settingsReturnScreen)),
                 new GridBagConstraints(0, 0, 1, 1, 0, 1,
                         GridBagConstraints.CENTER, GridBagConstraints.SOUTH,
                         new Insets(0, 0, 0, 0), 0, 0));
-                panel.add(controls, BorderLayout.SOUTH);
-                return panel;
+        panel.add(controls, BorderLayout.SOUTH);
+        return panel;
     }
 
     private JPanel centered(JComponent component) {
@@ -813,7 +873,7 @@ public class MegaTris extends JFrame implements BoardViewState {
     }
 
     private GameState snapshot() {
-        return new GameState(board, bigBoard, activeBigRow, activeBigCol, isXTurn, gameOver,
+        return new GameState(copyBoard(board), copyBigBoard(bigBoard), activeBigRow, activeBigCol, isXTurn, gameOver,
                 megaWinningLine, megaWinner, lastBigRow, lastBigCol, lastRow, lastCol,
                 lastMovePlayer);
     }
@@ -1000,8 +1060,8 @@ public class MegaTris extends JFrame implements BoardViewState {
     }
 
     private void restoreState(GameState lastState) {
-        this.board = lastState.board;
-        this.bigBoard = lastState.bigBoard;
+        this.board = copyBoard(lastState.board);
+        this.bigBoard = copyBigBoard(lastState.bigBoard);
         this.activeBigRow = lastState.activeBigRow;
         this.activeBigCol = lastState.activeBigCol;
         this.isXTurn = lastState.isXTurn;
@@ -1014,6 +1074,8 @@ public class MegaTris extends JFrame implements BoardViewState {
         this.lastRow = lastState.lastRow;
         this.lastCol = lastState.lastCol;
         this.lastMovePlayer = lastState.lastMovePlayer;
+        
+        // (Lascia intatto il resto del codice di restoreState per le animazioni)
         this.megaWinAnimation = 1f;
         this.boardAnimation = new float[3][3];
         for (int br = 0; br < 3; br++) {
@@ -1050,6 +1112,9 @@ public class MegaTris extends JFrame implements BoardViewState {
 
     private void processMove(int bR, int bC, int sR, int sC, boolean computerMove) {
         if (!gameStarted || gameOver || board[bR][bC][sR][sC] != '\0') return;
+        if (tournamentRule && positionTimeline.size() == 1) {
+            if (bR == 1 && bC == 1 && sR == 1 && sC == 1) return; // Mossa vietata!
+        }
         if (viewedPosition != positionTimeline.size() - 1) return;
         if (!computerMove && !isHumanTurn()) return;
         if (activeBigRow != -1 && (bR != activeBigRow || bC != activeBigCol)) return;
@@ -1115,7 +1180,7 @@ public class MegaTris extends JFrame implements BoardViewState {
         if (!isComputerTurn() || gameOver || computerWorker != null) return;
         thinkingStartedAt = System.currentTimeMillis();
         
-        String thinkingText = isEnglish ? "Computer is thinking" : "Il computer sta pensando";
+        String thinkingText = translate("Computer is thinking");
         statusLabel.setText(thinkingText);
         statusLabel.setForeground(fgDefault);
         
@@ -1136,6 +1201,8 @@ public class MegaTris extends JFrame implements BoardViewState {
             final char computerPlayer = isXTurn ? 'X' : 'O';
             final AI.Difficulty difficulty = selectedDifficulty(computerPlayer);
             final long thinkTime = selectedThinkTimeMillis();
+            final boolean applyTournament = (tournamentRule && positionTimeline.size() == 1);
+            if (applyTournament) board[1][1][1][1] = '-';
             computerWorker = new SwingWorker<AI.Move, Void>() {
                 @Override
                 protected AI.Move doInBackground() {
@@ -1337,22 +1404,22 @@ public class MegaTris extends JFrame implements BoardViewState {
 
     private void updateUIState() {
         if (!gameStarted) {
-            statusLabel.setText(isEnglish ? "Press New Game to begin" : "Premi Nuova Partita per iniziare");
+            statusLabel.setText(translate("Press New Game to begin"));
             statusLabel.setForeground(fgDefault);
         } else if (gameOver) {
             if (megaWinner == 'X' || megaWinner == 'O') {
-                statusLabel.setText(isEnglish ? ("PLAYER " + megaWinner + " WINS!") : ("IL GIOCATORE " + megaWinner + " VINCE!"));
+                statusLabel.setText(translate("PLAYER " + megaWinner + " WINS!"));
                 statusLabel.setForeground(megaWinner == 'X' ? fgX : fgO);
             } else {
-                statusLabel.setText(isEnglish ? "IT'S A DRAW!" : "È UN PAREGGIO!");
+                statusLabel.setText(translate("IT'S A DRAW!"));
                 statusLabel.setForeground(Color.GRAY);
             }
         } else {
             char player = isXTurn ? 'X' : 'O';
             Color playerColor = isXTurn ? fgX : fgO;
             
-            String prefix = isEnglish ? "Player " : "Turno di ";
-            String suffix = isEnglish ? " Move" : "";
+            String prefix = "EN".equals(currentLang) ? "Player " : ("IT".equals(currentLang) ? "Turno di " : "Zug von ");
+            String suffix = "EN".equals(currentLang) ? " Move" : "";
             
             statusLabel.setText("<html>" + prefix + "<font color='#" + colorToHex(playerColor) + "'>"
                     + player + "</font>" + suffix + "</html>");
@@ -1369,7 +1436,14 @@ public class MegaTris extends JFrame implements BoardViewState {
                         JButton btn = buttons[br][bc][sr][sc];
                         char cell = board[br][bc][sr][sc];
                         
-                        if (cell == 'X') {
+                        // Controlla se è il primissimo turno, la regola è attiva, e siamo nel centro esatto
+                        boolean isForbiddenCenter = tournamentRule && positionTimeline.size() == 1 
+                                                    && br == 1 && bc == 1 && sr == 1 && sc == 1;
+                        
+                        if (isForbiddenCenter) {
+                            btn.setText("Ø"); // Simbolo di blocco (puoi cambiarlo in "•" o "-")
+                            btn.setForeground(new Color(150, 150, 150, 120)); // Grigio semitrasparente
+                        } else if (cell == 'X') {
                             btn.setText("X");
                             btn.setForeground(fgX);
                         } else if (cell == 'O') {
@@ -1378,6 +1452,7 @@ public class MegaTris extends JFrame implements BoardViewState {
                         } else {
                             btn.setText("");
                         }
+                        
                         boolean isLastMove = br == lastBigRow && bc == lastBigCol
                                 && sr == lastRow && sc == lastCol;
                         btn.setBorderPainted(isLastMove);
@@ -1422,6 +1497,7 @@ public class MegaTris extends JFrame implements BoardViewState {
     public Color fgX() { return fgX; }
     public Color fgO() { return fgO; }
     public Color gridColor() { return gridColor; }
+    public Color fgDefault() { return fgDefault; }
     public int[] megaWinningLine() { return megaWinningLine; }
     public float megaWinAnimation() { return megaWinAnimation; }
     public char megaWinner() { return megaWinner; }
@@ -1462,7 +1538,8 @@ public class MegaTris extends JFrame implements BoardViewState {
         if (historyPanel != null) {
             historyPanel.setBackground(new Color(bgMain.getRed(), bgMain.getGreen(), bgMain.getBlue(), 180));
         }
-        
+        if (rulesPanel != null) rulesPanel.setBackground(bgMain);
+
         if (mainBoardPanel != null) {
             mainBoardPanel.setBackground(gridColor);
             boardContainer.setOpaque(false);
@@ -1486,59 +1563,199 @@ public class MegaTris extends JFrame implements BoardViewState {
     }
 
     private String translate(String key) {
-        if (isEnglish) return key; 
-        switch(key) {
-            case "NEW GAME": return "NUOVA PARTITA";
-            case "SETTINGS": return "IMPOSTAZIONI";
-            case "QUIT": return "ESCI";
-            case "BACK": return "INDIETRO";
-            case "2 PLAYERS": return "2 GIOCATORI";
-            case "VS COMPUTER": return "VS COMPUTER";
-            case "2 COMPUTERS": return "2 COMPUTER";
-            case "MULTIPLAYER": return "MULTIGIOCATORE";
-            case "START GAME": return "INIZIA GIOCO";
-            case "UNDO MOVE": return "ANNULLA MOSSA";
-            case "CREATED BY": return "CREATO DA";
-            case "ONLINE PLAY COMING SOON": return "GIOCO ONLINE IN ARRIVO";
-            case "GAME SETUP": return "IMPOSTAZIONI PARTITA";
-            case "START": return "INIZIA";
-            case "PAUSE": return "PAUSA";
-            case "RESUME": return "RIPRENDI";
-            case "MENU": return "MENU";
-            case "CONTINUE GAME": return "CONTINUA PARTITA";
-            
-            case "Music Volume": return "Volume Musica";
-            case "SFX Volume": return "Volume Effetti";
-            case "Player X": return "Giocatore X";
-            case "Player O": return "Giocatore O";
-            case "Difficulty": return "Difficoltà";
-            case "Opponent": return "Avversario";
-            
-            case "Beginner": return "Principiante";
-            case "Medium": return "Medio";
-            case "Difficult": return "Difficile";
-            case "Impossible": return "Impossibile";
-
-            case "Language": return "Lingua";
-            case "Theme": return "Tema";
-            case "Dark": return "Scuro";
-            case "Light": return "Chiaro";
-            case "Neon": return "Neon";
-            case "Retro": return "Retro";
-            
-            case "Computer is thinking": return "Il computer sta pensando";
-            case "Computer battle paused": return "Battaglia tra computer in pausa";
-            case "Press New Game to begin": return "Premi Nuova Partita per iniziare";
-            case "IT'S A DRAW!": return "È UN PAREGGIO!";
-            default:
-                if (key.startsWith("Player ") && key.endsWith(" Move")) {
-                    return "Turno del " + key.replace("Player ", "Gioc. ").replace(" Move", "");
-                }
-                if (key.endsWith(" WINS!")) {
-                    return "IL " + key.replace(" WINS!", " VINCE!").replace("PLAYER ", "GIOCATORE ");
-                }
-                return key;
+        if ("EN".equals(currentLang)) {
+            if (key.equals("1. How to Play")) return "1. How to Play";
+                if (key.equals("RULE_1_DESC")) return "Where you place your symbol determines where your opponent MUST play their next turn.";
+                if (key.equals("2. Winning Boards")) return "2. Winning Boards";
+                if (key.equals("RULE_2_DESC")) return "Get 3 in a row to win a small board. Win 3 small boards in a row to win the game!";
+                if (key.equals("3. Board Occupied")) return "3. Board Occupied";
+                if (key.equals("RULE_3_DESC")) return "If sent to a board that is already won or full, you MUST play your next turn in the board your opponent just played on.";
+                if (key.equals("4. Free Move")) return "4. Free Move";
+                if (key.equals("RULE_4_DESC")) return "If BOTH the destination board AND the board your opponent just played on are won/full, you get a Free Move ANYWHERE.";
+            if (key.equals("RULES_TEXT")) return "<html><div style='width: 550px; line-height: 1.5;'>"
+                + "<h2>ULTIMATE TIC-TAC-TOE RULES</h2>"
+                + "<b>1. The Grid:</b> The game is played on a large 3x3 grid, where each cell contains a smaller 3x3 grid.<br><br>"
+                + "<b>2. How to Play:</b> When you place a symbol, your move determines where your opponent MUST play next. <i>(e.g., If you play in the top-right corner of a small grid, the opponent must play their next turn in the top-right small board.)</i><br><br>"
+                + "<b>3. Winning Small Boards:</b> Win a small grid by getting 3 in a row. Winning a small grid claims that entire cell on the large board.<br><br>"
+                + "<b>4. Free Move:</b> If a player is sent to a small grid that is already won or full, they get a 'Free Move' and can play ANYWHERE on the board.<br><br>"
+                + "<b>5. How to Win:</b> Win the game by getting 3 small grids in a row on the large grid!<br><br>"
+                + "<h2>GAME MODES & FEATURES</h2>"
+                + "• <b>2 Players:</b> Play locally with a friend on the same PC.<br>"
+                + "• <b>VS Computer:</b> Play against the AI (Beginner to Impossible).<br>"
+                + "• <b>2 Computers:</b> Watch two AIs battle it out.<br>"
+                + "• <b>Undo Move:</b> Made a mistake? Click to go back in time.<br>"
+                + "• <b>Settings:</b> Change volume, languages and themes."
+                + "</div></html>";
+            return key; 
         }
+        
+        if ("IT".equals(currentLang)) {
+            switch(key) {
+                case "NEW GAME": return "NUOVA PARTITA";
+                case "SETTINGS": return "IMPOSTAZIONI";
+                case "RULES": return "REGOLE";
+                case "QUIT": return "ESCI";
+                case "BACK": return "INDIETRO";
+                case "2 PLAYERS": return "2 GIOCATORI";
+                case "VS COMPUTER": return "VS COMPUTER";
+                case "2 COMPUTERS": return "2 COMPUTER";
+                case "MULTIPLAYER": return "MULTIGIOCATORE";
+                case "START GAME": return "INIZIA GIOCO";
+                case "UNDO MOVE": return "ANNULLA MOSSA";
+                case "CREATED BY": return "CREATO DA";
+                case "ONLINE PLAY COMING SOON": return "GIOCO ONLINE IN ARRIVO";
+                case "GAME SETUP": return "IMPOSTAZIONI PARTITA";
+                case "START": return "INIZIA";
+                case "PAUSE": return "PAUSA";
+                case "RESUME": return "RIPRENDI";
+                case "MENU": return "MENU";
+                case "CONTINUE GAME": return "CONTINUA PARTITA";
+                case "Music Volume": return "Volume Musica";
+                case "SFX Volume": return "Volume Effetti";
+                case "Player X": return "Giocatore X";
+                case "Player O": return "Giocatore O";
+                case "Difficulty": return "Difficoltà";
+                case "Opponent": return "Avversario";
+                case "Beginner": return "Principiante";
+                case "Medium": return "Medio";
+                case "Difficult": return "Difficile";
+                case "Impossible": return "Impossibile";
+                case "Language": return "Lingua";
+                case "Theme": return "Tema";
+                case "Dark": return "Scuro";
+                case "Light": return "Chiaro";
+                case "Neon": return "Neon";
+                case "Retro": return "Retro";
+                case "Computer is thinking": return "Il computer sta pensando";
+                case "Computer battle paused": return "Battaglia in pausa";
+                case "Press New Game to begin": return "Premi Nuova Partita per iniziare";
+                case "IT'S A DRAW!": return "È UN PAREGGIO!";
+                case "Tournament Rule": return "Regola Torneo";
+
+                case "1. How to Play": return "1. Come Giocare";
+                case "RULE_1_DESC": return "La posizione del tuo simbolo determina in quale mini-tavolo DOVRÀ giocare l'avversario.";
+                case "2. Winning Boards": return "2. Vincere i Tavoli";
+                case "RULE_2_DESC": return "Allinea 3 simboli per vincere un mini-tavolo. Vinci 3 mini-tavoli per vincere la partita!";
+                case "3. Board Occupied": return "3. Tavolo Occupato";
+                case "RULE_3_DESC": return "Se vieni mandato in un tavolo già vinto o pieno, DEVI giocare nel tavolo in cui ha appena giocato il tuo avversario.";
+                case "4. Free Move": return "4. Mossa Libera";
+                case "RULE_4_DESC": return "Se SIA il tavolo di destinazione CHE quello in cui ha giocato l'avversario sono pieni, puoi giocare OVUNQUE.";
+                case "RULES_TEXT": return "<html><div style='width: 550px; line-height: 1.5;'>"
+                    + "<h2>REGOLE DEL GIOCO</h2>"
+                    + "<b>1. La Griglia:</b> Il gioco si svolge su una griglia 3x3, dove ogni cella contiene una griglia più piccola 3x3.<br><br>"
+                    + "<b>2. Come Giocare:</b> La posizione in cui giochi determina dove DOVRÀ giocare l'avversario. <i>(es. Se giochi nell'angolo in alto a destra di un mini-tavolo, l'avversario dovrà giocare nel mini-tavolo in alto a destra della griglia principale.)</i><br><br>"
+                    + "<b>3. Vincere i Mini-Tavoli:</b> Allinea 3 simboli per vincere un mini-tavolo. Chi vince il mini-tavolo conquista quella cella gigante.<br><br>"
+                    + "<b>4. Mossa Libera:</b> Se un giocatore viene mandato in un mini-tavolo già vinto o pieno, ottiene una 'Mossa Libera' e può giocare OVUNQUE sulla plancia.<br><br>"
+                    + "<b>5. Vittoria:</b> Vinci la partita allineando 3 mini-tavoli vinti sulla griglia principale!<br><br>"
+                    + "<h2>MODALITÀ E FUNZIONI</h2>"
+                    + "• <b>2 Giocatori:</b> Gioca in locale con un amico sullo stesso PC.<br>"
+                    + "• <b>VS Computer:</b> Gioca contro l'IA (4 livelli di difficoltà).<br>"
+                    + "• <b>2 Computer:</b> Guarda due Intelligenze Artificiali sfidarsi.<br>"
+                    + "• <b>Annulla Mossa:</b> Hai sbagliato? Torna indietro nel tempo.<br>"
+                    + "• <b>Impostazioni:</b> Cambia volume, lingua (EN, IT, DE) e temi."
+                    + "</div></html>";
+                default:
+                    if (key.startsWith("Player ") && key.endsWith(" Move")) return "Turno del " + key.replace("Player ", "Gioc. ").replace(" Move", "");
+                    if (key.endsWith(" WINS!")) return "IL " + key.replace(" WINS!", " VINCE!").replace("PLAYER ", "GIOCATORE ");
+                    return key;
+            }
+        } else if ("DE".equals(currentLang)) {
+            switch(key) {
+                case "NEW GAME": return "NEUES SPIEL";
+                case "SETTINGS": return "EINSTELLUNGEN";
+                case "RULES": return "REGELN";
+                case "QUIT": return "BEENDEN";
+                case "BACK": return "ZURÜCK";
+                case "2 PLAYERS": return "2 SPIELER";
+                case "VS COMPUTER": return "VS COMPUTER";
+                case "2 COMPUTERS": return "2 COMPUTER";
+                case "MULTIPLAYER": return "MEHRSPIELER";
+                case "START GAME": return "SPIEL STARTEN";
+                case "UNDO MOVE": return "ZUG RÜCKGÄNGIG";
+                case "CREATED BY": return "ERSTELLT VON";
+                case "ONLINE PLAY COMING SOON": return "ONLINE BALD VERFÜGBAR";
+                case "GAME SETUP": return "SPIELEINSTELLUNGEN";
+                case "START": return "START";
+                case "PAUSE": return "PAUSE";
+                case "RESUME": return "WEITER";
+                case "MENU": return "MENÜ";
+                case "CONTINUE GAME": return "FORTSETZEN";
+                case "Music Volume": return "Musik";
+                case "SFX Volume": return "Effekte";
+                case "Player X": return "Spieler X";
+                case "Player O": return "Spieler O";
+                case "Difficulty": return "Schwierigkeit";
+                case "Opponent": return "Gegner";
+                case "Beginner": return "Anfänger";
+                case "Medium": return "Mittel";
+                case "Difficult": return "Schwer";
+                case "Impossible": return "Unmöglich";
+                case "Language": return "Sprache";
+                case "Theme": return "Thema";
+                case "Dark": return "Dunkel";
+                case "Light": return "Hell";
+                case "Neon": return "Neon";
+                case "Retro": return "Retro";
+                case "Computer is thinking": return "Computer denkt nach";
+                case "Computer battle paused": return "Computer-Kampf pausiert";
+                case "Press New Game to begin": return "Drücke Neues Spiel zum Starten";
+                case "IT'S A DRAW!": return "UNENTSCHIEDEN!";
+                case "Tournament Rule": return "Turnierregel";
+
+                case "1. How to Play": return "1. Spielablauf";
+                case "RULE_1_DESC": return "Dein Zug bestimmt, in welchem kleinen Feld dein Gegner als nächstes spielen MUSS.";
+                case "2. Winning Boards": return "2. Felder gewinnen";
+                case "RULE_2_DESC": return "Bilde eine 3er-Reihe, um ein kleines Feld zu gewinnen. Gewinne 3 kleine Felder für den Sieg!";
+                case "3. Board Occupied": return "3. Feld Besetzt";
+                case "RULE_3_DESC": return "Wenn du in ein Feld geschickt wirst, das voll ist, MUSST du in dem Feld spielen, in dem dein Gegner gerade gespielt hat.";
+                case "4. Free Move": return "4. Freier Zug";
+                case "RULE_4_DESC": return "Wenn SOWOHL das Zielfeld ALS AUCH das Feld deines Gegners voll sind, darfst du ÜBERALL spielen.";
+                case "RULES_TEXT": return "<html><div style='width: 550px; line-height: 1.5;'>"
+                    + "<h2>MEGATRIS REGELN</h2>"
+                    + "<b>1. Das Feld:</b> Das Spiel wird auf einem großen 3x3-Feld gespielt, wobei jedes Feld ein kleineres 3x3-Feld enthält.<br><br>"
+                    + "<b>2. Spielablauf:</b> Dein Zug bestimmt, wo dein Gegner als nächstes spielen MUSS. <i>(Bsp.: Wenn du oben rechts in einem kleinen Feld spielst, muss der Gegner im kleinen Feld oben rechts auf dem großen Brett spielen.)</i><br><br>"
+                    + "<b>3. Kleine Felder gewinnen:</b> Bilde eine 3er-Reihe, um ein kleines Feld zu gewinnen. Wer gewinnt, erobert dieses große Feld.<br><br>"
+                    + "<b>4. Freier Zug:</b> Wenn ein Spieler in ein kleines Feld geschickt wird, das bereits gewonnen oder voll ist, darf er ÜBERALL auf dem Brett spielen.<br><br>"
+                    + "<b>5. Sieg:</b> Gewinne das Spiel, indem du 3 kleine gewonnene Felder in einer Reihe auf dem großen Brett hast!<br><br>"
+                    + "<h2>MODI & FUNKTIONEN</h2>"
+                    + "• <b>2 Spieler:</b> Lokal mit einem Freund am selben PC spielen.<br>"
+                    + "• <b>VS Computer:</b> Spiele gegen die KI (4 Schwierigkeiten).<br>"
+                    + "• <b>2 Computer:</b> Sieh zwei KIs beim Kämpfen zu.<br>"
+                    + "• <b>Zug rückgängig:</b> Fehler gemacht? Klicke, um zurückzugehen.<br>"
+                    + "• <b>Einstellungen:</b> Ändere Lautstärke, Sprache und Designs."
+                    + "</div></html>";
+                default:
+                    if (key.startsWith("Player ") && key.endsWith(" Move")) return "Zug von Spieler " + key.replace("Player ", "").replace(" Move", "");
+                    if (key.endsWith(" WINS!")) return "SPIELER " + key.replace(" WINS!", "").replace("PLAYER ", "") + " GEWINNT!";
+                    return key;
+            }
+        }
+        return key;
+    }
+
+    private JPanel createRuleCard(String titleKey, String descKey, JComponent visual) {
+        JPanel card = new JPanel(new BorderLayout(10, 10));
+        card.setOpaque(false);
+        
+        JLabel title = new JLabel(titleKey, SwingConstants.CENTER);
+        title.setName(titleKey);
+        title.setFont(new Font("Arial", Font.BOLD, 22));
+        title.setForeground(fgX);
+
+        JLabel desc = new JLabel(descKey);
+        desc.setName(descKey + "_HTML");
+        desc.setFont(new Font("Arial", Font.PLAIN, 15));
+        desc.setHorizontalAlignment(SwingConstants.CENTER);
+
+        JPanel textPanel = new JPanel(new BorderLayout());
+        textPanel.setOpaque(false);
+        textPanel.add(title, BorderLayout.NORTH);
+        textPanel.add(desc, BorderLayout.CENTER);
+
+        card.add(textPanel, BorderLayout.NORTH);
+        if (visual != null) card.add(visual, BorderLayout.CENTER);
+        
+        return card;
     }
 
     private void applyThemeAndLanguage(Container parent) {
@@ -1551,18 +1768,26 @@ public class MegaTris extends JFrame implements BoardViewState {
                     // PASSIAMO IL COLORE DINAMICO AL POSTO DI GRIDCOLOR
                     UiStyler.buttonColors(b, fgDefault, bgMain, currentBorderColor);
                     
-                    if ("Language".equals(name)) {
-                        b.setText(isEnglish ? "Language: English" : "Lingua: Italiano");
-                    } else if ("PlayToggle".equals(name)) {
-                        b.setText(isEnglish ? "Play " + humanSide : "Gioca " + humanSide);
+                    if ("PlayToggle".equals(name)) {
+                        b.setText(("IT".equals(currentLang) ? "Gioca " : ("DE".equals(currentLang) ? "Spiele " : "Play ")) + humanSide);
+                    } else if ("TournamentRuleToggle".equals(name)) {
+                        b.setText(translate("Tournament Rule") + ": " + (tournamentRule ? "ON" : "OFF"));
                     } else if (name != null) {
                         b.setText(translate(name));
                     }
                 }
             } else if (c instanceof JLabel) {
                 JLabel l = (JLabel) c;
-                l.setForeground(fgDefault);
-                if (l.getName() != null) l.setText(translate(l.getName()));
+                if (l.getName() != null && !l.getName().startsWith("1.") && !l.getName().startsWith("2.") && !l.getName().startsWith("3.") && !l.getName().startsWith("4.")) {
+                    l.setForeground(fgDefault);
+                }
+                if (l.getName() != null) {
+                    if (l.getName().endsWith("_HTML")) {
+                        l.setText("<html><div style='text-align: center; width: 100%;'>" + translate(l.getName().replace("_HTML", "")) + "</div></html>");
+                    } else {
+                        l.setText(translate(l.getName()));
+                    }
+                }
             } else if (c instanceof OptionSlider) {
                 OptionSlider s = (OptionSlider) c;
                 s.updateTheme(bgMain, bgHighlight, fgX, fgDefault);
@@ -1665,8 +1890,8 @@ public class MegaTris extends JFrame implements BoardViewState {
                     gameStarted = true;
                     
                     humanSideToggle.setSelected(humanSide == 'O');
-                    humanSideToggle.setText(isEnglish ? "Play " + humanSide : "Gioca " + humanSide);
-                    
+                    humanSideToggle.setText(("IT".equals(currentLang) ? "Gioca " : ("DE".equals(currentLang) ? "Spiele " : "Play ")) + humanSide);
+
                     restoreState(positionTimeline.get(viewedPosition));
                     refreshHistoryView();
                 }
@@ -1676,9 +1901,111 @@ public class MegaTris extends JFrame implements BoardViewState {
         }
     }
 
+    private char[][][][] copyBoard(char[][][][] source) {
+        char[][][][] result = new char[3][3][3][3];
+        for (int a = 0; a < 3; a++) for (int b = 0; b < 3; b++)
+            for (int c = 0; c < 3; c++) System.arraycopy(source[a][b][c], 0, result[a][b][c], 0, 3);
+        return result;
+    }
+
+    private char[][] copyBigBoard(char[][] source) {
+        char[][] result = new char[3][3];
+        for (int r = 0; r < 3; r++) System.arraycopy(source[r], 0, result[r], 0, 3);
+        return result;
+    }
+
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             new MegaTris().setVisible(true);
         });
+    }
+
+    private class RuleVisualPanel extends JPanel {
+        private int type;
+
+        public RuleVisualPanel(int type) {
+            this.type = type;
+            setOpaque(false);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            Graphics2D g2 = (Graphics2D) g;
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            int size = Math.min(getWidth(), getHeight()) - 20;
+            int x = (getWidth() - size) / 2;
+            int y = (getHeight() - size) / 2;
+
+            g2.setStroke(new BasicStroke(3));
+            g2.setColor(gridColor);
+
+            if (type == 1) { // Spiegazione Mossa
+                drawGrid(g2, x, y, size, 3);
+                g2.setColor(new Color(bgHighlight.getRed(), bgHighlight.getGreen(), bgHighlight.getBlue(), 120));
+                g2.fillRect(x + (size/3)*2, y, size/3, size/3); 
+                g2.setColor(fgX);
+                int cx = x + size/3, cy = y + size/3, cs = size/3;
+                drawX(g2, cx + (cs/3)*2, cy, cs/3); 
+                g2.setColor(fgO);
+                g2.setStroke(new BasicStroke(4));
+                g2.drawLine(cx + cs - 10, cy + 10, x + (size/3)*2 + cs/2, y + cs/2); 
+            } else if (type == 2) { // Spiegazione Vittoria
+                drawGrid(g2, x + size/4, y + size/4, size/2, 3);
+                g2.setColor(fgX);
+                int sx = x + size/4, sy = y + size/4, cell = (size/2)/3;
+                drawX(g2, sx, sy, cell); drawX(g2, sx + cell, sy + cell, cell); drawX(g2, sx + cell*2, sy + cell*2, cell);
+                g2.setStroke(new BasicStroke(10));
+                g2.setColor(new Color(fgX.getRed(), fgX.getGreen(), fgX.getBlue(), 150));
+                drawX(g2, sx, sy, size/2); 
+            } else if (type == 3) { // Destinazione Piena -> Stessa Casella
+                drawGrid(g2, x, y, size, 3);
+                // Tavolo in alto a destra vinto da O (Destinazione piena)
+                g2.setColor(new Color(bgWonO.getRed(), bgWonO.getGreen(), bgWonO.getBlue(), 150));
+                g2.fillRect(x + (size/3)*2, y, size/3, size/3);
+                g2.setColor(fgO); g2.setStroke(new BasicStroke(8));
+                g2.drawOval(x + (size/3)*2 + 10, y + 10, size/3 - 20, size/3 - 20);
+                
+                // Evidenzia il centro (Tavolo dell'ultima mossa in cui tocca restare)
+                g2.setColor(new Color(bgHighlight.getRed(), bgHighlight.getGreen(), bgHighlight.getBlue(), 120));
+                g2.fillRect(x + size/3, y + size/3, size/3, size/3);
+                
+                // Mossa mirata in alto a destra dal centro
+                g2.setStroke(new BasicStroke(3)); g2.setColor(fgX);
+                drawX(g2, x + size/3 + (size/9)*2, y + size/3, size/9);
+            } else if (type == 4) { // Free Move
+                drawGrid(g2, x, y, size, 3);
+                // Tavolo in alto a destra vinto da O
+                g2.setColor(new Color(bgWonO.getRed(), bgWonO.getGreen(), bgWonO.getBlue(), 150));
+                g2.fillRect(x + (size/3)*2, y, size/3, size/3);
+                g2.setColor(fgO); g2.setStroke(new BasicStroke(8));
+                g2.drawOval(x + (size/3)*2 + 10, y + 10, size/3 - 20, size/3 - 20);
+                
+                // Tavolo centrale vinto da X (Così è pieno anche lui)
+                g2.setColor(new Color(bgWonX.getRed(), bgWonX.getGreen(), bgWonX.getBlue(), 150));
+                g2.fillRect(x + size/3, y + size/3, size/3, size/3);
+                g2.setColor(fgX); g2.setStroke(new BasicStroke(8));
+                drawX(g2, x + size/3 + 10, y + size/3 + 10, size/3 - 20);
+                
+                // Evidenzia tutti gli altri (Mossa Libera)
+                g2.setColor(new Color(bgHighlight.getRed(), bgHighlight.getGreen(), bgHighlight.getBlue(), 80));
+                for(int r=0; r<3; r++) {
+                    for(int c=0; c<3; c++) {
+                        if(!((r==0 && c==2) || (r==1 && c==1))) {
+                            g2.fillRect(x + c*(size/3), y + r*(size/3), size/3, size/3);
+                        }
+                    }
+                }
+            }
+        }
+
+        private void drawGrid(Graphics2D g, int x, int y, int s, int lines) {
+            int step = s / lines;
+            for (int i = 1; i < lines; i++) { g.drawLine(x + i*step, y, x + i*step, y + s); g.drawLine(x, y + i*step, x + s, y + i*step); }
+        }
+
+        private void drawX(Graphics2D g, int x, int y, int s) {
+            int p = s/4; g.drawLine(x+p, y+p, x+s-p, y+s-p); g.drawLine(x+s-p, y+p, x+p, y+s-p);
+        }
     }
 }
